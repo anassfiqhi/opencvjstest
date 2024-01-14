@@ -1,0 +1,110 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Panorama Stitching</title>
+    <script async src="https://docs.opencv.org/master/opencv.js" onload="onOpenCvReady();" crossorigin="anonymous"></script>
+</head>
+<body>
+    <video id="video" width="640" height="480" autoplay></video>
+    <canvas id="previewCanvas"></canvas>
+    <button onclick="captureImage()">Capture Image</button>
+    <button onclick="processImages()">Stitch Images</button>
+
+    <script>
+        let images = [];
+        let previewCanvas = document.getElementById("previewCanvas");
+        let ctx = previewCanvas.getContext("2d");
+
+        async function onOpenCvReady() {
+            document.getElementById("video").srcObject = await getCameraStream();
+            document.getElementById("fileInput").addEventListener("change", handleFileSelect);
+        }
+
+        async function getCameraStream() {
+            try {
+                const stream = await navigator.mediaDevices.getUserMedia({ video: true });
+                return stream;
+            } catch (error) {
+                console.error("Error accessing camera: ", error);
+            }
+        }
+
+        function handleFileSelect(event) {
+            images = [];
+            let files = event.target.files;
+
+            for (let i = 0; i < files.length; i++) {
+                let reader = new FileReader();
+                reader.onload = function (e) {
+                    let img = new Image();
+                    img.src = e.target.result;
+                    img.onload = function () {
+                        images.push(img);
+                        displayImages(images);
+                    };
+                };
+                reader.readAsDataURL(files[i]);
+            }
+        }
+
+        function displayImages(images) {
+            previewCanvas.width = images[0].width * images.length;
+            previewCanvas.height = images[0].height;
+
+            for (let i = 0; i < images.length; i++) {
+                ctx.drawImage(images[i], i * images[0].width, 0);
+            }
+        }
+
+        function captureImage() {
+            let video = document.getElementById("video");
+            let captureCanvas = document.createElement("canvas");
+            let captureContext = captureCanvas.getContext("2d");
+
+            captureCanvas.width = video.videoWidth;
+            captureCanvas.height = video.videoHeight;
+
+            captureContext.drawImage(video, 0, 0, captureCanvas.width, captureCanvas.height);
+
+            let capturedImage = new Image();
+            capturedImage.src = captureCanvas.toDataURL();
+
+            images.push(capturedImage);
+            displayImages(images);
+        }
+
+        function processImages() {
+            if (images.length < 2) {
+                alert("Please capture at least two images.");
+                return;
+            }
+
+            // Perform image stitching using OpenCV.js (simplified example)
+            let stitcher = new cv.Stitcher();
+            let resultMat = new cv.Mat();
+
+            let imageMats = images.map(img => cv.imread(img));
+
+            let status = stitcher.stitch(imageMats, resultMat);
+
+            if (status === cv.Stitcher_OK) {
+                // Display the stitched panorama
+                let resultCanvas = document.createElement("canvas");
+                resultCanvas.width = resultMat.cols;
+                resultCanvas.height = resultMat.rows;
+                document.body.appendChild(resultCanvas);
+                let resultCtx = resultCanvas.getContext("2d");
+                resultCtx.putImageData(new ImageData(new Uint8ClampedArray(resultMat.data), resultMat.cols, resultMat.rows), 0, 0);
+            } else {
+                alert("Stitching failed.");
+            }
+
+            // Clean up resources
+            imageMats.forEach(mat => mat.delete());
+            resultMat.delete();
+        }
+    </script>
+</body>
+</html>
